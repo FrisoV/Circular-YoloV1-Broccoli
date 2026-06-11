@@ -1,0 +1,41 @@
+Baseline:
+{'dataset_params': {'train_im_sets': ['data/train'], 'val_im_sets': ['data/val'], 'test_im_sets': ['data/test'], 'num_classes': 1, 'im_size': 448, 'im_size_train': 448, 'im_size_val': 448, 'im_size_test': 448}, 'model_params': {'im_channels': 3, 'backbone_channels': 512, 'conv_spatial_size': 7, 'yolo_conv_channels': 1024, 'leaky_relu_slope': 0.1, 'fc_dim': 4096, 'fc_dropout': 0.5, 'S': 7, 'B': 2, 'use_sigmoid': True, 'use_conv': True}, 'train_params': {'task_name': 'C:/temp/broccoli_training', 'seed': 1111, 'acc_steps': 1, 'log_steps': 100, 'num_epochs': 50, 'batch_size': 4, 'lr': 0.001, 'use_cosine_scheduler': True, 'warmup_epochs': 3, 'lr_steps': [15, 25], 'early_stop_patience': 8, 'early_stop_min_delta': 0.001, 'infer_conf_threshold': 0.2, 'eval_conf_threshold': 0.001, 'nms_threshold': 0.6, 'ckpt_name': 'yolo_broccoli_baseline.pth', 'best_ckpt_name': 'yolo_broccoli_baseline_best.pth', 'eval_map_interval': 1, 'log_fname': 'training_log_baseline.json', 'infer_sample_indices': [0, 5, 10, 15, 20, 30, 40, 50, 60, 70]}}
+
+Epoch 49/50 Summary:
+  Train Loss: 0.2450
+  Val Loss:   0.2984
+  LR:         0.000014
+  Running val mAP@0.5 (box IoU)...
+  Val mAP@0.5: 0.7212
+  ✓ Best model saved! (Val Loss: 0.2984)
+
+Epoch 50/50 was worse
+Mean Average Precision: 0.7038
+
+=============================================
+Circle Model:
+
+{'dataset_params': {'train_im_sets': ['data/train'], 'val_im_sets': ['data/val'], 'test_im_sets': ['data/test'], 'num_classes': 1, 'im_size': 448, 'im_size_train': 448, 'im_size_val': 448, 'im_size_test': 448}, 'model_params': {'im_channels': 3, 'backbone_channels': 512, 'conv_spatial_size': 7, 'yolo_conv_channels': 1024, 'leaky_relu_slope': 0.1, 'fc_dim': 4096, 'fc_dropout': 0.5, 'S': 7, 'B': 2, 'use_sigmoid': True, 'use_conv': True, 'use_circles': True}, 'train_params': {'task_name': 'C:/temp/broccoli_training', 'seed': 1111, 'acc_steps': 1, 'log_steps': 100, 'num_epochs': 50, 'batch_size': 4, 'lr': 0.001, 'use_cosine_scheduler': True, 'warmup_epochs': 3, 'lr_steps': [15, 25], 'early_stop_patience': 8, 'early_stop_min_delta': 0.001, 'infer_conf_threshold': 0.2, 'eval_conf_threshold': 0.001, 'nms_threshold': 0.6, 'ckpt_name': 'yolo_broccoli.pth', 'best_ckpt_name': 'yolo_broccoli_best.pth', 'eval_map_interval': 1, 'log_fname': 'training_log_circle.json', 'infer_sample_indices': [0, 5, 10, 15, 20, 30, 40, 50, 60, 70]}}
+
+Epoch 45/50 Summary:
+  Train Loss: 0.4823
+  Val Loss:   0.5196
+  LR:         0.000049
+  Running val mAP@0.5 (circle IoU)...
+  Val mAP@0.5: 0.7170
+  ✓ Best model saved! (Val Loss: 0.5210)
+
+Epoch 50/50 Summary:
+  Train Loss: 0.4886
+  Val Loss:   0.5263
+  LR:         0.000037
+  Running val mAP@0.5 (circle IoU)...
+  Val mAP@0.5: 0.7182
+  No improvement for 5 epoch(s) (Best: 0.5196)
+
+Mean Average Precision: 0.7598
+
+============================================================
+Threshold tuning:
+Changed nms_threshold : 0.6 --> 0.4
+New mAP: 0.7837

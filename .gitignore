@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Model checkpoints and results (large files — store separately)
+results/
+*.pth
+*.pt
+
+# Datasets (not versioned)
+data/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Generated outputs
+lr_schedule.png
+pr_curves.png
+training_curves.png
+broccoli_training/

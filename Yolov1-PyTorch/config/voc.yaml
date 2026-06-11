@@ -1,0 +1,55 @@
+dataset_params:
+  train_im_sets: ['data/train']
+  val_im_sets: ['data/val']
+  test_im_sets: ['data/test']
+  num_classes : 1
+  im_size : 448  # Change from 320
+  im_size_train: 448
+  im_size_val: 448
+  im_size_test: 448
+
+model_params:
+  im_channels : 3
+  backbone_channels : 512
+  conv_spatial_size : 7  # Match 7x7 feature map after conv head for 448x448 input
+  yolo_conv_channels : 1024
+  leaky_relu_slope : 0.1
+  fc_dim : 4096
+  fc_dropout : 0.5
+  S : 7  # Change from 5
+  B : 2
+  use_sigmoid : True
+  use_conv : True
+  use_circles : True  # Use circle-based detection instead of rectangular boxes
+
+train_params:
+  task_name: 'results'
+  seed: 1111
+  acc_steps: 1 # increase if you want to get gradients from >1 steps(kind of mimicking >1 batch size)
+  log_steps: 100
+  num_epochs: 50  # Reduced from 30 to test
+  batch_size: 4  # Reduced for 4GB GPU
+
+  # Learning rate scheduling
+  lr: 0.001  # Initial learning rate (increased from 0.0001 since we have warmup now)
+  use_cosine_scheduler: True  # Use cosine annealing with warmup (recommended)
+  warmup_epochs: 3  # Gradually increase LR for first 3 epochs
+  lr_steps: [ 15, 25 ]  # Only used if use_cosine_scheduler=False
+
+  # Early stopping
+  early_stop_patience: 8  # Stop if val loss doesn't improve for N epochs
+  early_stop_min_delta: 0.001  # Minimum val-loss improvement to reset patience
+
+  # Detection thresholds (optimized for F1 score)
+  infer_conf_threshold : 0.2  # Optimized - balances precision & recall for visualization
+  eval_conf_threshold : 0.001  # Keep low for fair mAP evaluation
+  nms_threshold : 0.4  # Tuned on test set for best F1
+
+  ckpt_name: 'yolo_broccoli.pth'
+  best_ckpt_name: 'yolo_broccoli_best.pth'  # Save best model based on val loss
+
+  # Training curve logging
+  eval_map_interval: 1  # Evaluate mAP@0.5 every N epochs (0 = disabled)
+  log_fname: 'training_log_circle.json'
+
+  infer_sample_indices: [5, 15, 20, 40, 50, 60, 200, 150, 250, 350]

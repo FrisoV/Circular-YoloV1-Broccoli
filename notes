@@ -1,0 +1,315 @@
+How to open the right environment for YOLOv1:
+# conda activate yolov1
+# cd "C:\Users\20193000\OneDrive - TU Eindhoven\Master Data Science in Business & Entrepreneurship\Thesis\Yolov1-PyTorch"
+
+TO TRAIN YOLOV1 (Remember to pause syncing of OneDrive):
+# python -m tools.train --config config\voc.yaml
+
+images are automatically resized to 320 in line 110 of voc_py
+
+in voc_py, the class was changed to just being brocolli. Number of classes was also changed in voc_yaml
+
+Dataloader changed to load labelme format images now (load_images_and_anns in voc_py)
+
+Changed numpy to 1.26.4 and albumentations to 1.3.1 in requirements for compatibility
+
+5/1: Reinstalled torch & torchvision to run on GPU
+Lowered the number of epochs. Due to runnning on CPU, it took like 7 hours to get 13 epochs out.
+
+5/2: Training worked, took about 2/3 hours for 30 epochs
+Compute Average Precision (AP) by computing the area under the precision-recall curve
+precision = proportion of true positives to false positives
+recall = proportion of true positives to false negatives
+TEST ON TRAINED MODEL:
+-- Evaluate mAP --
+ # python -m tools.infer --config config\voc.yaml --evaluate True --infer_samples False
+Class Wise Average Precisions
+AP for class broccoli = 0.0009 --> very low
+Mean Average Precision : 0.0009 --> very low --> Adjusted C from 20 to 1, number of classes
+
+-- Run inference and visualize predictions --
+# python -m tools.infer --config config\voc.yaml --infer_samples True --evaluate False
+
+Generate predictions on 5 random test images → saved in samples/preds/
+
+After changing classes:
+AP 0.0007
+
+After changing S and conv_spatial_size to 5:
+Loss start at 4.3, ends at 2.6 epoch 1
+mAP 0.0660
+
+12-2:
+Added a way to track validation loss during training amd to see mAP on the validation set during training, to see if mAP increases whilst training loss decreases or if validation loss stagnates (indicating overfitting). Now need to find ways to significantly improve mAP. Aim is about 50-60 mAP
+
+23-2:
+Visualization tool of dataloader in test.ipynb --> it works
+Epoch 1/30 - Train Loss: 1.2684 | Val Loss: 1.2633
+Epoch 2/30 - Train Loss: 1.2144 | Val Loss: 1.2039
+Changed to 448x448 with S=7:
+Lowered epochs to 2
+Epoch 1/2 - Train Loss: 1.0832 | Val Loss: 1.1762
+Epoch 2/2 - Train Loss: 1.0472 | Val Loss: 1.1333
+mAP: 0.1268
+
+26-2:
+Learning rate change:
+Epochs 1-3 (Warmup):
+LR: 0.0001 → 0.001 (gradual increase) - Helps stabilize early training
+Epochs 4-30 (Cosine Decay):
+LR: 0.001 → 0.00001 (smooth decay)
+Formula: LR = min_lr + 0.5 * (max_lr - min_lr) * (1 + cos(π * epoch / total))
+
+Epoch 10/10 Summary:
+  Train Loss: 0.5805
+  Val Loss:   0.6012
+  LR:         0.000059
+mAP 0.4097
+
+Adjusted confidence threshold to 0.3
+
+Confidence Threshold Tuning:
+# python -m tools.tune_thresholds --config config\voc.yaml
+  Detection thresholds (optimized for F1 score)
+  infer_conf_threshold : 0.2  # Optimized - balances precision & recall for visualization
+  eval_conf_threshold : 0.001  # Keep low for fair mAP evaluation
+  nms_threshold : 0.6  # Optimized - suppresses duplicate boxes effectively
+mAP 0.4088
+
+===================
+FINAL BASELINE:
+===================
+
+Training on 30 epochs:
+Epoch 30/30 Summary:
+  Train Loss: 0.2836
+  Val Loss:   0.3513
+  LR:         0.000013
+mAP 0.5712
+
+Next steps:
+10-3:
+Adjusted the dataloader for circle annotation. 
+11-3:
+Changed target dimension for YOLO
+
+26-3:
+1. voc.py changed the bcircle to bbox to use albumentations. Now it tracks the circle center as a keypoint for albumentations and bboxes for cropping/clipping.
+2. changed yolo.py so the output layer produces 4*B+C rather than 5*B+C
+3. Loss function - Adapt for 4 params, use circle IoU (perhaps use l1/l2 loss, if circle IoU doesn't work)
+3. Inference conversion - Handle 4-param predictions
+4. NMS - Use circle IoU from circle_ops.py
+5. Visualization - Draw circles
+6. Evaluation/mAP 
+
+28-4:
+Was getting into issues when training where the loss would become non-finite (NaN or Inf), which would cause the training to break. To address this, I implemented a few changes:
+1. Add batch-level debug logging
+2. Save non-finite batch tensors to disk
+3. Run training to capture debug files
+4. Inspect saved debug files to identify the source of non-finite values
+5. Checkpoint saving didn't work due to non-finite values, so I added a check to skip saving checkpoints when non-finite values are detected in the loss or model parameters. This way, I can prevent the training process from breaking and focus on debugging the issue.
+
+Two fixes for more non-finite values:
+
+In loss/yolov1_loss.py, IoU target for confidence is now detached
+max_iou_val = max_iou_val.detach(). This prevents unstable gradients flowing through circle IoU math (acos branch can be numerically nasty).
+In tools/train.py, optimizer steps are now guarded
+Added gradients_are_finite(...)
+If gradients are non-finite, it skips optimizer.step() and logs it instead of poisoning weights.
+Also removed the unconditional end-of-epoch optimizer step; now remainder-step only happens when accumulation leaves leftovers.
+Validation
+
+============================
+NEW WITH CIRCLES
+============================
+
+Epoch 30/30 Summary:
+  Train Loss: 0.5288
+  Val Loss:   0.5714
+  LR:         0.000013
+  No improvement for 4 epoch(s) (Best: 0.5621)
+
+29/4
+
+Epoch 26/30 Summary:
+  Train Loss: 0.5263
+  Val Loss:   0.5621
+  LR:         0.000091
+  ✓ Best model saved! (Val Loss: 0.5621)
+
+Class Wise Average Precisions
+AP for class broccoli = 0.6756
+Mean Average Precision : 0.6756
+
+- Ran into an issue where multiple circles with different radii were generated on the same broccoli in an image,
+so I added a fix where same-center detections are collapsed before Non Maximum Suppression (NMS).
+This way, if the model predicts multiple circles around the same broccoli, only the one with the highest confidence will be kept for evaluation and visualization.
+
+19/5
+get_circle_iou_scalar (line 56) — pure-Python circle IoU using the three-case formula (no overlap / containment / partial). 
+Mirrors circle_ops.py but works scalar for the mAP matching loop.
+
+compute_circle_map (after compute_map) — a drop-in replacement for compute_map that takes (cx, cy, r) lists instead of (x1, y1, x2, y2) lists, 
+and uses get_circle_iou_scalar for TP/FP matching. No "difficult" concept needed since your broccoli dataset doesn't use it.
+
+convert_yolo_pred_circles (after convert_yolo_pred_x1y1x2y2) — returns predicted circles as (cx, cy, r) normalized 0–1, without converting to bounding squares. 
+This is the correct format for circle IoU matching.
+
+collate_function — now passes circles (the (cx, cy, r) GT tensor from the dataset) through to evaluate_map.
+
+evaluate_map — branches on use_circles:
+  Circle path: gets GT circles from batch['circles'], predicts with convert_yolo_pred_circles, converts to bounding squares only for NMS/dedup (which expect boxes), then uses actual circles for compute_circle_map.
+  Box path: the original logic, unchanged.
+
+The mAP number you get in circle mode will now be higher than before for a well-trained model, because a tight circle prediction is correctly rewarded —
+a predicted circle that perfectly fits the broccoli head would have been penalized slightly by box IoU (background corners of the bounding square counted against it).
+
+
+
+New training results with circle IoU (early stopping after 18 epochs):
+Epoch 10/50 Summary:
+  Train Loss: 0.4702
+  Val Loss:   0.4889
+  LR:         0.000961
+  ✓ Best model saved! (Val Loss: 0.4889)
+  Mean Average Precision : 0.7901
+
+27/5:
+After adjusting deduplication of same-center predictions:
+mAP: 0.8289
+
+Implement training curves to plot train/val loss and mAP over epochs for both models.
+Here's a summary of what was added and how to use it:
+
+What changed
+
+File	Change
+Yolov1-PyTorch/tools/train.py	import json, import math; circles key in collate_function; _circle_iou_scalar + _run_circle_val_map helper functions; JSON log init/resume + per-epoch mAP eval + log save in train()
+Yolov1-PyTorch/config/voc.yaml	Added eval_map_interval: 1 and log_fname: 'training_log_circle.json'
+Yolov1-PyTorch Baseline/tools/train.py	import json; _get_iou + _run_box_val_map helpers; same JSON logging pattern
+Yolov1-PyTorch Baseline/config/voc.yaml	Added eval_map_interval: 1 and log_fname: 'training_log_baseline.json'
+Thesis/plot_curves.py	New plotting script
+Workflow
+
+Train circle model: python -m tools.train --config config/voc.yaml
+
+→ writes C:/temp/broccoli_training/training_log_circle.json
+
+Train baseline model (from the Baseline dir): python -m tools.train --config config/voc.yaml
+
+→ writes C:/temp/broccoli_training/training_log_baseline.json
+
+Plot at any time (even mid-training): python plot_curves.py
+
+→ saves C:/temp/broccoli_training/training_curves.png
+
+Key notes
+
+eval_map_interval: 1 means mAP is computed every epoch. Set to 5 to speed up training if it's too slow.
+The log is resumed automatically if training is restarted from a checkpoint.
+Both log files coexist in the same C:/temp/broccoli_training directory. Note that both models also share the same checkpoint names (yolo_broccoli.pth), so you should train them sequentially rather than simultaneously to avoid overwriting each other's checkpoints.
+
+28/5
+New model: mAP = 0.8578
+{'dataset_params': {'train_im_sets': ['data/train'], 'val_im_sets': ['data/val'], 'test_im_sets': ['data/test'], 'num_classes': 1, 'im_size': 448, 'im_size_train': 448, 'im_size_val': 448, 'im_size_test': 448}, 'model_params': {'im_channels': 3, 'backbone_channels': 512, 'conv_spatial_size': 7, 'yolo_conv_channels': 1024, 'leaky_relu_slope': 0.1, 'fc_dim': 4096, 'fc_dropout': 0.5, 'S': 7, 'B': 2, 'use_sigmoid': True, 'use_conv': True, 'use_circles': True}, 'train_params': {'task_name': 'C:/temp/broccoli_training', 'seed': 1111, 'acc_steps': 1, 'log_steps': 100, 'num_epochs': 50, 'batch_size': 4, 'lr': 0.001, 'use_cosine_scheduler': True, 'warmup_epochs': 3, 'lr_steps': [15, 25], 'early_stop_patience': 8, 'early_stop_min_delta': 0.001, 'infer_conf_threshold': 0.2, 'eval_conf_threshold': 0.001, 'nms_threshold': 0.6, 'ckpt_name': 'yolo_broccoli.pth', 'best_ckpt_name': 'yolo_broccoli_best.pth', 'eval_map_interval': 1, 'log_fname': 'training_log_circle.json', 'infer_sample_indices': [0, 1, 5, 6, 10, 11, 15, 16, 20, 21]}}
+
+31/5
+infer.py (circle model):
+
+Added circle_nms() using get_circle_iou_scalar — O(N²) greedy NMS on true circle IoU
+infer(): branches on use_circles — circle path uses convert_yolo_pred_circles + circle_nms, box path is unchanged
+evaluate_map(): replaces the bounding-square proxy + dedup + torchvision NMS with a single circle_nms call
+plot_pr_curves.py:
+
+Added _circle_nms() using the existing _circle_iou helper
+eval_circle_model(): replaces the same dedup + box NMS block with _circle_nms
+Both pipelines are now symmetric: circle model uses circle IoU everywhere (training loss, evaluation matching, and NMS), baseline uses box IoU everywhere. No extra post-processing steps.
+
+==============================
+Confidence threshold tuning on circle model:
+================================================================================
+CONFIDENCE & NMS THRESHOLD TUNING
+================================================================================
+
+Testing different threshold combinations...
+Confidence thresholds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+NMS thresholds: [0.4, 0.5, 0.6, 0.7]
+
+========================================================================================================================
+Conf   NMS    Det    GT     Match  Prec     Rec      F1
+========================================================================================================================
+0.2    0.4    641    637    498    0.777    0.782    0.779
+0.3    0.4    542    637    458    0.845    0.719    0.777
+0.3    0.5    576    637    462    0.802    0.725    0.762
+0.2    0.5    695    637    506    0.728    0.794    0.760
+0.3    0.6    628    637    467    0.744    0.733    0.738
+0.1    0.4    774    637    516    0.667    0.810    0.731
+0.2    0.6    787    637    514    0.653    0.807    0.722
+0.4    0.4    427    637    381    0.892    0.598    0.716
+0.4    0.5    449    637    383    0.853    0.601    0.705
+0.1    0.5    854    637    524    0.614    0.823    0.703
+0.3    0.7    703    637    470    0.669    0.738    0.701
+0.4    0.6    482    637    384    0.797    0.603    0.686
+0.2    0.7    910    637    519    0.570    0.815    0.671
+0.4    0.7    539    637    385    0.714    0.604    0.655
+0.1    0.6    1019   637    537    0.527    0.843    0.649
+0.5    0.4    285    637    269    0.944    0.422    0.584
+0.1    0.7    1231   637    543    0.441    0.852    0.581
+0.5    0.5    298    637    270    0.906    0.424    0.578
+0.5    0.6    310    637    271    0.874    0.425    0.572
+0.5    0.7    341    637    271    0.795    0.425    0.554
+0.6    0.6    55     637    54     0.982    0.085    0.156
+0.6    0.7    55     637    54     0.982    0.085    0.156
+0.6    0.4    54     637    53     0.981    0.083    0.153
+0.6    0.5    54     637    53     0.981    0.083    0.153
+0.7    0.4    1      637    1      1.000    0.002    0.003
+0.7    0.5    1      637    1      1.000    0.002    0.003
+0.7    0.6    1      637    1      1.000    0.002    0.003
+0.7    0.7    1      637    1      1.000    0.002    0.003
+
+BEST CONFIG (by F1 score):
+  Confidence Threshold: 0.2
+  NMS Threshold: 0.4
+  F1 Score: 0.7793
+  Precision: 0.7769
+  Recall: 0.7818
+
+Changed nms_threshold : 0.6 --> 0.4
+new mAP: 
+
+===========================
+STRUCTURE OF Yolov1-PyTorch
+===========================
+config
+--- __init__.py
+--- voc.yaml (configuration)
+data
+--- test
+------ xxx_Untrimmed_Frame_x_xxx_rgb.json
+------ xxx_Untrimmed_Frame_x_xxx_rgb.png
+--- train
+------ xxx_Untrimmed_Frame_x_xxx_rgb.json
+------ xxx_Untrimmed_Frame_x_xxx_rgb.png
+--- val
+------ xxx_Untrimmed_Frame_x_xxx_rgb.json
+------ xxx_Untrimmed_Frame_x_xxx_rgb.png
+dataset
+--- __init__.py
+--- voc.py (def load_images_and_anns, dataloader & class VOCDataset, data transformer)
+loss
+--- __init__.py
+--- yolov1_loss.py (def get_iou, to calculate iou & class YOLOV1Loss, to calculate loss)
+models
+--- __init__.py
+--- yolo.py (class YOLOV1, actual model)
+tools
+--- __init__.py
+--- infer.py (?)
+--- train.py (def collate_function, to arrange data & def train, trains the model)
+utils
+--- __init__.py
+--- visualization_utils.py (def visualize_bbox & def visualize & def draw_grid & def draw_cls_grid & def draw_cls_text)
+voc
+README.md
+requirements.txt
